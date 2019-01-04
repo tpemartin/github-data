@@ -1,0 +1,150 @@
+---
+title: "個人學習成長記錄"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+```
+
+```{r global, include=FALSE}
+library(readr)
+studentData <- read_csv("https://raw.githubusercontent.com/tpemartin/github-data/master/studentFeatures.csv");
+library(dplyr); library(stringr); library(lubridate); library(purrr); library(ggplot2); library(plotly)
+studentData %>%
+  group_by(學系, 學屆, 學年, 學期) %>%
+  summarise(
+    同學平均成績=round(mean(學期平均),digits=2),
+    同學中位成績=round(median(學期平均),digits=2),
+    同學中位借書量=median(學期借書量)
+  ) %>%
+  ungroup %>%
+  mutate(
+    學年學期=as.factor(paste0(學年,"-",學期))
+        )  -> studentSummary
+```
+
+Inputs {.sidebar data-width=300}
+--------------------------------------------------------
+
+```{r}
+textInput("student_id","請輸入學號")
+```
+
+
+Column {data-width=350}
+-----------------------------------------------------------------------
+
+### Chart A
+
+```{r}
+DT::renderDataTable({
+  .x<-input$student_id
+  
+  studentData %>%
+    filter(學號==.x) -> student_i
+
+  student_i %>%
+    select(學年, 學期, 學期借書量)  -> studentLibrary
+  student_i %>%
+    select(學系,學屆, 學年, 學期, 學期平均, 學期PR) %>%
+    mutate(
+      學年學期=as.factor(paste0(學年,"-",學期)),
+      學期平均=round(學期平均,digits = 2)
+      )  -> studentGPA        
+
+    studentGPA %>%
+      select(
+        學年,學期,學期平均,學期PR
+      ) %>%
+    DT::datatable(options = list(
+      bPaginate = FALSE
+    )) -> gpaTable; gpaTable
+})
+
+```
+
+Column {data-width=350}
+-----------------------------------------------------------------------
+
+### Chart B
+
+```{r}
+renderPlotly({
+  .x<-input$student_id
+  studentData %>%
+    filter(學號==.x) -> student_i
+  
+  student_i %>%
+    select(學年, 學期, 學期借書量)  -> studentLibrary
+  student_i %>%
+    select(學系,學屆, 學年, 學期, 學期平均, 學期PR) %>%
+    mutate(
+      學年學期=as.factor(paste0(學年,"-",學期)),
+      學期平均=round(學期平均,digits = 2)
+      )  -> studentGPA
+  studentSummary %>% 
+    filter(
+      學系==studentGPA$學系[1],
+      學屆==studentGPA$學屆[1]) -> classmateData
+  validClassmateData <-
+    classmateData %>%
+        filter((學年-學屆)*2+學期<=8)
+  validClassmateData$同學平均成績[nrow(validClassmateData)]-> yloc
+  validClassmateData$學年學期 %>% length -> xloc
+  studentGPA %>%
+    ggplot()+
+    geom_line(aes(x=學年學期,y=學期平均,group=1),size=1.5)+
+    geom_line(
+      data=validClassmateData,
+      aes(x=學年學期,y=同學平均成績,group=1),
+      color="#33B5FF",size=1.2,alpha=0.5)+
+    annotate("text",x=c(xloc),y=yloc*0.996,label="同學平均",color="#2B95D2") +
+    labs(x=NULL,y="學期平均")->
+    studentGPAgg
+  studentGPAplotly <- studentGPAgg %>% ggplotly
+  studentGPAplotly  
+})
+```
+
+### Chart C
+
+```{r}
+
+renderPlotly({
+  .x<-input$student_id
+  studentData %>%
+    filter(學號==.x) -> student_i
+
+  student_i %>%
+    select(學年, 學期, 學期借書量)  -> studentLibrary
+  student_i %>%
+    select(學系,學屆, 學年, 學期, 學期平均, 學期PR) %>%
+    mutate(
+      學年學期=as.factor(paste0(學年,"-",學期)),
+      學期平均=round(學期平均,digits = 2)
+      )  -> studentGPA        
+  studentSummary %>% 
+    filter(
+      學系==studentGPA$學系[1],
+      學屆==studentGPA$學屆[1]) -> classmateData
+  validClassmateData <-
+    classmateData %>%
+        filter((學年-學屆)*2+學期<=8)
+  validClassmateData$同學平均成績[nrow(validClassmateData)]-> yloc
+  validClassmateData$學年學期 %>% length -> xloc
+  
+  studentGPA %>%
+    ggplot()+
+    geom_line(aes(x=學年學期,y=學期PR,group=1),size=1.5)+
+    labs(x=NULL,y="學期PR") -> studentPRgg
+  ggplotly(studentPRgg) -> studentPRggplotly
+  studentPRggplotly
+})
+
+```
+
